@@ -1,1 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Postbox — bulk sender</title>
+<style>
+  :root {
+    --ink: #1b2430;
+    --paper: #f6f5f1;
+    --card: #ffffff;
+    --line: #e2ded4;
+    --slate: #4a5568;
+    --stamp: #c65a2e;
+    --stamp-dark: #a4471f;
+    --ok: #2f7d5b;
+    --err: #b3401f;
+    --mono: "SF Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    --sans: -apple-system, "Inter", "Helvetica Neue", Arial, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--paper);
+    color: var(--ink);
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) 0;
+  }
+  header {
+    padding: 28px 20px 18px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  header .mark {
+    width: 30px; height: 30px;
+    border: 2px solid var(--stamp);
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--stamp);
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 13px;
+    transform: rotate(-6deg);
+    flex-shrink: 0;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+  header .sub {
+    font-size: 12px;
+    color: var(--slate);
+    font-family: var(--mono);
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 18px 16px 100px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 16px;
+  }
+  .card h2 {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--stamp-dark);
+    margin: 0 0 14px;
+    font-family: var(--mono);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2::before {
+    content: "";
+    width: 6px; height: 6px;
+    background: var(--stamp);
+    border-radius: 50%;
+  }
+  label {
+    display: block;
+    font-size: 12.5px;
+    color: var(--slate);
+    margin: 12px 0 5px;
+  }
+  label:first-of-type { margin-top: 0; }
+  input, textarea, select {
+    width: 100%;
+    font-size: 16px; /* prevents iOS auto-zoom */
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: #fdfcfa;
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+  input:focus, textarea:focus, select:focus {
+    outline: none;
+    border-color: var(--stamp);
+  }
+  .mono { font-family: var(--mono); font-size: 14px; }
+  textarea { resize: vertical; min-height: 90px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .row3 { display: grid; grid-template-columns: 1.3fr 0.8fr 0.9fr; gap: 10px; }
+  .hint { font-size: 11.5px; color: #8a8478; margin-top: 5px; line-height: 1.4; }
+  .toggle {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--slate); margin-top: 10px;
+  }
+  .toggle input { width: auto; }
 
+  button.primary {
+    width: 100%;
+    padding: 15px;
+    background: var(--stamp);
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin-top: 4px;
+  }
+  button.primary:active { background: var(--stamp-dark); }
+  button.primary:disabled { background: #c9c2b4; }
+  button.ghost {
+    width: 100%;
+    padding: 12px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 14px;
+    color: var(--slate);
+    margin-top: 8px;
+  }
+
+  #progress { margin-top: 14px; }
+  .bar {
+    height: 8px;
+    background: var(--line);
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .bar > div {
+    height: 100%;
+    width: 0%;
+    background: var(--stamp);
+    transition: width .25s ease;
+  }
+  .stats { display: flex; justify-content: space-between; font-size: 12px; color: var(--slate); margin-top: 6px; font-family: var(--mono); }
+  #log {
+    margin-top: 10px;
+    max-height: 220px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+  .log-row {
+    padding: 8px 10px;
+    font-family: var(--mono);
+    font-size: 12px;
+    border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  .log-row:last-child { border-bottom: none; }
+  .log-row .ok { color: var(--ok); }
+  .log-row .err { color: var(--err); }
+
+  #gate {
+    position: fixed; inset: 0; background: var(--paper);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px; z-index: 50;
+  }
+  #gate .box { max-width: 320px; width: 100%; text-align: center; }
+  #gate .mark { width: 44px; height: 44px; font-size: 18px; margin: 0 auto 16px; }
+  .err-text { color: var(--err); font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div id="gate">
+  <div class="box">
+    <div class="mark card" style="border-radius:10px; display:flex; align-items:center; justify-content:center;">✉</div>
+    <h1 style="margin-bottom:6px;">Postbox</h1>
+    <p class="hint" style="margin-bottom:16px;">Enter your passcode to open your sender.</p>
+    <input type="password" id="gate-pass" placeholder="Passcode" autocomplete="off" />
+    <button class="primary" style="margin-top:10px;" onclick="unlock()">Unlock</button>
+    <div class="err-text" id="gate-err"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <header>
+    <span class="mark">✉</span>
+    <div>
+      <h1>Postbox</h1>
+      <div class="sub">your own smtp, your own list</div>
+    </div>
+  </header>
+
+  <main>
+    <div class="card">
+      <h2>SMTP connection</h2>
+      <div class="row3">
+        <div>
+          <label>Host</label>
+          <input class="mono" id="smtpHost" placeholder="smtp.example.com" />
+        </div>
+        <div>
+          <label>Port</label>
+          <input class="mono" id="smtpPort" placeholder="587" inputmode="numeric" />
+        </div>
+        <div>
+          <label>Security</label>
+          <select id="smtpSecure">
+            <option value="false">STARTTLS (587)</option>
+            <option value="true">SSL (465)</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div>
+          <label>Username</label>
+          <input class="mono" id="smtpUser" placeholder="you@example.com" autocapitalize="off" />
+        </div>
+        <div>
+          <label>Password</label>
+          <input class="mono" id="smtpPass" type="password" placeholder="app password" />
+        </div>
+      </div>
+      <div class="hint">Gmail/Outlook need an "app password", not your login password. Settings are saved only on this phone.</div>
+    </div>
+
+    <div class="card">
+      <h2>From &amp; reply-to</h2>
+      <div class="row2">
+        <div>
+          <label>Sender name</label>
+          <input id="fromName" placeholder="Jamie at Acme" />
+        </div>
+        <div>
+          <label>Sender email</label>
+          <input id="fromEmail" placeholder="jamie@acme.com" autocapitalize="off" />
+        </div>
+      </div>
+      <label>Reply-to (optional)</label>
+      <input id="replyTo" placeholder="defaults to sender email" autocapitalize="off" />
+    </div>
+
+    <div class="card">
+      <h2>Message</h2>
+      <label>Subject</label>
+      <input id="subject" placeholder="Hi {{name}}, quick update" />
+      <label>Body (HTML allowed)</label>
+      <textarea id="bodyHtml" rows="7" placeholder="Hi {{name}},&#10;&#10;Write your message here...">Hi {{name}},
+
+Write your message here.
+</textarea>
+      <div class="hint">Use <code>{{name}}</code> and <code>{{email}}</code> anywhere to personalize each email.</div>
+    </div>
+
+    <div class="card">
+      <h2>Recipients — under 200</h2>
+      <label>One per line: <span class="mono">email, name</span> (name optional)</label>
+      <textarea id="recipients" rows="6" placeholder="ana@example.com, Ana&#10;ben@example.com"></textarea>
+      <div class="hint" id="recipCount">0 recipients</div>
+    </div>
+
+    <button class="primary" id="sendBtn" onclick="startSend()">Send</button>
+    <button class="ghost" onclick="clearProgress()">Clear log</button>
+
+    <div id="progress" class="card hidden">
+      <h2>Sending</h2>
+      <div class="bar"><div id="barFill"></div></div>
+      <div class="stats">
+        <span id="statSent">0 sent</span>
+        <span id="statFailed">0 failed</span>
+        <span id="statTotal">of 0</span>
+      </div>
+      <div id="log"></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const FIELDS = ["smtpHost","smtpPort","smtpSecure","smtpUser","fromName","fromEmail","replyTo","subject","bodyHtml","recipients"];
+let appPassword = localStorage.getItem("postbox_pass") || "";
+
+function unlock() {
+  const p = document.getElementById("gate-pass").value;
+  appPassword = p;
+  // Try a lightweight authenticated request to validate the passcode.
+  fetch("/api/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-app-password": p },
+    body: JSON.stringify({}) // intentionally invalid body; we only care about the auth status
+  }).then(r => {
+    if (r.status === 401) {
+      document.getElementById("gate-err").textContent = "Wrong passcode.";
+      return;
+    }
+    localStorage.setItem("postbox_pass", p);
+    document.getElementById("gate").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    loadFields();
+  }).catch(() => {
+    document.getElementById("gate-err").textContent = "Could not reach server.";
+  });
+}
+
+function loadFields() {
+  FIELDS.forEach(id => {
+    const saved = localStorage.getItem("postbox_" + id);
+    if (saved !== null) document.getElementById(id).value = saved;
+  });
+  updateRecipCount();
+}
+
+function saveFields() {
+  FIELDS.forEach(id => {
+    localStorage.setItem("postbox_" + id, document.getElementById(id).value);
+  });
+}
+
+function updateRecipCount() {
+  const lines = document.getElementById("recipients").value.split("\n").map(l => l.trim()).filter(Boolean);
+  document.getElementById("recipCount").textContent = lines.length + " recipient" + (lines.length === 1 ? "" : "s");
+}
+document.addEventListener("input", (e) => {
+  if (FIELDS.includes(e.target.id)) saveFields();
+  if (e.target.id === "recipients") updateRecipCount();
+});
+
+function parseRecipients() {
+  return document.getElementById("recipients").value
+    .split("\n")
+    .map(l => l.trim())
+    .filter(Boolean)
+    .map(line => {
+      const [email, ...rest] = line.split(",");
+      return { email: (email || "").trim(), name: rest.join(",").trim() };
+    });
+}
+
+function clearProgress() {
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("progress").classList.add("hidden");
+}
+
+async function startSend() {
+  const recipients = parseRecipients();
+  if (recipients.length === 0) { alert("Add at least one recipient."); return; }
+  if (recipients.length > 200) { alert("Limit is 200 recipients per send."); return; }
+
+  const payload = {
+    smtpHost: val("smtpHost"),
+    smtpPort: val("smtpPort"),
+    smtpSecure: val("smtpSecure") === "true",
+    smtpUser: val("smtpUser"),
+    smtpPass: val("smtpPass"),
+    fromEmail: val("fromEmail"),
+    fromName: val("fromName"),
+    replyTo: val("replyTo"),
+    subject: val("subject"),
+    bodyHtml: val("bodyHtml"),
+    recipients
+  };
+
+  const btn = document.getElementById("sendBtn");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+  document.getElementById("progress").classList.remove("hidden");
+  document.getElementById("log").innerHTML = "";
+  document.getElementById("statTotal").textContent = "of " + recipients.length;
+  document.getElementById("barFill").style.width = "0%";
+
+  try {
+    const resp = await fetch("/api/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-app-password": appPassword },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody.error || ("HTTP " + resp.status));
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        handleEvent(JSON.parse(line));
+      }
+    }
+  } catch (err) {
+    logRow("—", "err", err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Send";
+  }
+}
+
+function handleEvent(evt) {
+  logRow(evt.to, evt.status === "sent" ? "ok" : "err", evt.status === "sent" ? "sent" : (evt.error || "failed"));
+  document.getElementById("statSent").textContent = evt.sent + " sent";
+  document.getElementById("statFailed").textContent = evt.failed + " failed";
+  const pct = Math.round(((evt.sent + evt.failed) / evt.total) * 100);
+  document.getElementById("barFill").style.width = pct + "%";
+}
+
+function logRow(to, cls, msg) {
+  const div = document.createElement("div");
+  div.className = "log-row";
+  div.innerHTML = `<span>${to}</span><span class="${cls}">${msg}</span>`;
+  const log = document.getElementById("log");
+  log.prepend(div);
+}
+
+function val(id) { return document.getElementById(id).value.trim(); }
+
+// If no passcode was ever set server-side, still let people in without one.
+document.getElementById("gate-pass").addEventListener("keydown", e => { if (e.key === "Enter") unlock(); });
+</script>
+</body>
+</html>
