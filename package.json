@@ -1,0 +1,13 @@
+{
+  "name": "mailsender",
+  "version": "1.0.0",
+  "description": "Personal bulk SMTP email sender with a mobile-friendly web UI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14"
+  }
+}
